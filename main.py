@@ -1,36 +1,43 @@
 import streamlit as st
-from transformers import pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 import json
 import random
 
-# ✅ Set Streamlit page config FIRST
+# Set Streamlit page config
 st.set_page_config(page_title="💌 My Memory Bot")
 
-# 📖 Load memories from JSON
+# Load memory data
 with open("memories.json", "r", encoding="utf-8") as f:
     memory_data = json.load(f)
 
-# 🚀 Load text generation pipeline from Hugging Face
+# Load model and tokenizer with caching
 @st.cache_resource
 def load_generator():
     model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    return pipeline("text-generation", model=model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id)
+    return model, tokenizer
 
-generator = load_generator()
+model, tokenizer = load_generator()
 
-# 🎨 App UI
+# App title and intro
 st.title("💌 My Memory Bot")
-st.write("This bot is on a very emotional mission: to make **Errorgon** finally understand how ridiculously, hopelessly, dramatically much **Romi** loves him. Like, *'please don't leave me, I'm already emotionally deceased'* levels of love. 💀❤️.")
+st.write(
+    "This bot is on a very emotional mission: to make **Errorgon** finally understand "
+    "how ridiculously, hopelessly, dramatically much **Romi** loves him. "
+    "Like, *'please don't leave me, I'm already emotionally deceased'* levels of love. 💀❤️."
+)
 
-# ✍️ Input from user
+# Emotion input
 emotion = st.text_input("How are you feeling right now? (e.g. sad, angry, missing you)")
 
-# 🧠 Memory matching
+# Memory filter
 def get_memory_by_emotion(emotion):
     matches = [m for m in memory_data["memories"] if emotion.lower() in m["emotion"].lower()]
     return random.choice(matches)["message"] if matches else None
 
-# 🤖 Hugging Face text generation
+# Text generation logic
 def generate_reply(emotion, memory):
     prompt = f"""
 You are a loving memory bot who knows everything about my love for Errorgon.
@@ -39,10 +46,12 @@ Use the memory below and expand it into a warm, emotional, comforting message fu
 
 Memory: {memory}
 """
-    result = generator(prompt, max_new_tokens=100, do_sample=True)[0]["generated_text"]
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+    output_ids = model.generate(input_ids, max_new_tokens=100, do_sample=True)
+    result = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     return result.strip()
 
-# 💖 Button logic
+# Button interaction
 if st.button("I love you don't stay angry on me 💖"):
     if not emotion:
         st.warning("Please tell me how you're feeling.")
